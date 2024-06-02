@@ -5,42 +5,61 @@ import pandas as pd
 
 s3_client = boto3.client('s3')
 sns_client = boto3.client('sns')
-sns_arn  = "arn:aws:sns:us-east-1:058264373160:doordash-notification-alert"
+sns_arn = "arn:aws:sns:us-east-1:058264373160:doordash-notification-alert"
 
 def lambda_handler(event, context):
-    
-    print(event)
     try:
-        s3_bucket_name = event['Records'][0]['s3']['bucket']['name']
-        s3_object_key = event['Records'][0]['s3']['object']['key']
-        print(s3_bucket_name)
-        print(s3_object_key)
-        resp = s3_client.get_object(Bucket = s3_bucket_name, Key = s3_object_key)
-        print(resp["Body"])
-        s3_object_body = resp["Body"].read().encode('utf-8')
-        print(s3_object_body)
-        delivery_records = json.loads(s3_object_body)
-        print("1", delivery_records)  # Parse JSON array into list of dictionaries
-
-        df_s3_bucket = pd.DataFrame(delivery_records)  # Create DataFrame from list of dictionaries
-        print(df_s3_bucket.head())
-
-        df_filtered = df_s3_bucket[df_s3_bucket["status"] == "delivered"]
-        print("2",df_filtered.head()) # my business requirement is that I have to filter records on the basis of status
-
-        csv_buffer = io.StringIO()
-        df_filtered.to_csv(csv_buffer, index=False)
-
-
-        s3_upload_bucket = "doordash-landing-s3-bucket"
-        s3_upload_object_key = "file.txt"
-        s3_client.put_object(Bucket = s3_upload_bucket, Key = s3_upload_object_key, Body = csv_buffer.getvalue())
-
-        message = "Successfully filtered delivery status from your file 😁 : {} ".format("s3://" + s3_bucket_name + "/" + s3_object_key)
-        sns_client.publish(Subject = "SUCCESS - Delivery Status filtered", TargetArn = sns_arn, Message = message, MessageStructure = 'text')
-
-    except Exception as err:
-        message = "Unable to filter delivery status from your file 😢 : {} ".format("s3://" + s3_bucket_name + "/" + s3_object_key)
-        sns_client.publish(Subject = "FAILED - Delivery Status not filtered", TargetArn = sns_arn, Message = message, MessageStructure = 'text')
-
-
+        for record in event['Records']:
+            s3_bucket_name = record['s3']['bucket']['name']
+            s3_object_key = record['s3']['object']['key']
+            
+            # Retrieve the object from S3
+            obj = s3_client.get_object(Bucket=s3_bucket_name, Key=s3_object_key)
+            lines = obj['Body'].read().decode('utf-8').splitlines()
+            
+            # Initialize an empty list to store filtered records
+            filtered_records = []
+            
+            # Process each line as a JSON object
+            for line in lines:
+                try:
+                    # Parse JSON from each line
+                    data = json.loads(line)
+                    # Assuming data is a dictionary, process it accordingly
+                    if data.get("status") == "delivered":
+                        # Add the record to the list of filtered records
+                        filtered_records.append(data)
+                except Exception as e:
+                    # Handle JSON parsing errors
+                    print("Error parsing JSON:", e)
+                    continue  # Skip to the next line if parsing fails
+            
+            # Create a DataFrame from the filtered records
+            df_filtered = pd.DataFrame(filtered_records)
+            
+            # Convert DataFrame to CSV format
+            csv_buffer = io.StringIO()
+            df_filtered.to_csv(csv_buffer, index=False)
+            
+            # Upload CSV to S3
+            s3_upload_bucket = "doordash-landing-s3-bucket"
+            s3_upload_object_key = "file.txt"
+            s3_client.put_object(Bucket=s3_upload_bucket, Key=s3_upload_object_key, Body=csv_buffer.getvalue())
+            
+            # Example: Publish a message to SNS for successful processing
+            sns_client.publish(
+                Subject="SUCCESS - Data Processing",
+                TargetArn=sns_arn,
+                Message="Successfully processed data from S3 object: s3://{}/{}".format(s3_bucket_name, s3_object_key),
+                MessageStructure='text'
+            )
+    
+    except Exception as e:
+        # Handle exceptions
+        print("Error:", e)
+        sns_client.publish(
+            Subject="ERROR - Data Processing",
+            TargetArn=sns_arn,
+            Message="Error processing data from S3 object: s3://{}/{}".format(s3_bucket_name, s3_object_key),
+            MessageStructure='text'
+        )
