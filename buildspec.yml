@@ -18,6 +18,5 @@ phases:
       - echo "Uploading to S3..."
       - aws s3 cp deployment_package.zip s3://doordash-incoming-s3-bucket/
       - echo "Updating Lambda function via S3..."
-      - aws lambda update-function-code --function-name doordash-lambda-function-trigger
- --s3-bucket doordash-incoming-s3-bucket --s3-key deployment_package.zip
+      - aws lambda update-function-code --function-name doordash-lambda-function-trigger --s3-bucket doordash-incoming-s3-bucket --s3-key deployment_package.zip
       - echo "Deployment complete!"
