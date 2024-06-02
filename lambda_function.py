@@ -19,12 +19,14 @@ def lambda_handler(event, context):
         print(resp["Body"])
         s3_object_body = resp["Body"].read().encode('utf-8')
         print(s3_object_body)
-        delivery_records = json.loads(s3_object_body)  # Parse JSON array into list of dictionaries
+        delivery_records = json.loads(s3_object_body)
+        print("1", delivery_records)  # Parse JSON array into list of dictionaries
 
         df_s3_bucket = pd.DataFrame(delivery_records)  # Create DataFrame from list of dictionaries
         print(df_s3_bucket.head())
 
-        df_filtered = df_s3_bucket[df_s3_bucket["status"] == "delivered"] # my business requirement is that I have to filter records on the basis of status
+        df_filtered = df_s3_bucket[df_s3_bucket["status"] == "delivered"]
+        print("2",df_filtered.head()) # my business requirement is that I have to filter records on the basis of status
 
         csv_buffer = io.StringIO()
         df_filtered.to_csv(csv_buffer, index=False)
